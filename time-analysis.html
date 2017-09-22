@@ -1,4 +1,7 @@
 <link rel="import" href="../polymer/polymer-element.html">
+<!-- <link rel="import" href="bower_components/google-chart/google-chart.html"> -->
+
+
 
 <dom-module id="time-analysis">
   <template>
@@ -7,7 +10,22 @@
         display: block;
       }
     </style>
-    <h2>Hello [[prop1]]!</h2>
+
+    <template is="dom-repeat" items="[[datetimesData]]">
+      <p>[[_stringify(item)]]</p>
+    </template>
+    <hr>
+    <p>[[_stringify(relatedData)]]
+    <hr>
+    <p>[[minTime]]-[[maxTime]]
+
+    <google-chart
+      type='pie'
+      options='{"title": "Distribution of days in 2001Q1"}'
+      cols='[{"label":"Month", "type":"string"}, {"label":"Days", "type":"number"}]'
+      rows='[["Jan", 31],["Feb", 28],["Mar", 31]]'>
+    </google-chart>
+
   </template>
 
   <script>
@@ -23,12 +41,64 @@
       static get is() { return 'time-analysis'; }
       static get properties() {
         return {
-          prop1: {
+          datetimes: {
+            type: Array,
+            value: null,
+          },
+          datetimesData: {
+            type: Array,
+            computed: 'computeDatetimesData(datetimes)',
+          },
+          relatedData: {
             type: String,
-            value: 'time-analysis'
-          }
+            computed: 'computedRelatedData(datetimesData)',
+          },
         };
       }
+
+      computeDatetimesData(datetimes) {
+        if (!datetimes || !datetimes[0]) return;
+        const datetimesData = datetimes
+          .map(dt => new Date(dt))
+          .map(dt => {
+            return {
+              datetime: dt, 
+              weekday: this._getWeekDay(dt),
+              time: this._getTime(dt),
+            }
+          }); 
+        console.log(datetimesData);
+        return datetimesData;
+      }
+
+      computedRelatedData(datetimesData) {
+        if (!datetimesData || !datetimesData[0]) return;
+        const times = datetimesData.map(dt => dt.time).sort();
+        this.set('minTime', times[0])
+        this.set('maxTime', times[times.length-1])
+
+        return {
+          minTime: this.minTime,
+          maxTime: this.maxTime,
+        }
+      }
+
+      _getWeekDay(date) {
+        //https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+        const weekdayFormat = new Intl.DateTimeFormat(window.navigator.language, { 
+          weekday: 'long', 
+        });
+        return weekdayFormat.format(date);
+      }
+      _getTime(date) {
+        return date.toLocaleString('pt-BR').substring(11,16).trim();
+      }
+
+      _stringify(obj) {
+        return JSON.stringify(obj, null, 2);
+      }
+
+
     }
 
     window.customElements.define(TimeAnalysis.is, TimeAnalysis);

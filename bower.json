@@ -3,7 +3,8 @@
   "description": "Analyzes data that have a datetime field.",
   "main": "time-analysis.html",
   "dependencies": {
-    "polymer": "Polymer/polymer#^2.0.0"
+    "polymer": "Polymer/polymer#^2.0.0",
+    "google-chart": "GoogleWebComponents/google-chart#^2.0.0"
   },
   "devDependencies": {
     "iron-demo-helpers": "PolymerElements/iron-demo-helpers#^2.0.0",
