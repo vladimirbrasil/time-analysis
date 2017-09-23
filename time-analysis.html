@@ -1,30 +1,49 @@
 <link rel="import" href="../polymer/polymer-element.html">
+<link rel="import" href="my-icons.html">
+<link rel="import" href="bower_components/a-timeline/a-timeline.html">
+
 <!-- <link rel="import" href="bower_components/google-chart/google-chart.html"> -->
-
-
 
 <dom-module id="time-analysis">
   <template>
     <style>
       :host {
         display: block;
+        --time-analysis-main-color: var(--default-primary-color, grey);
+        --iron-icon-fill-color: var(--time-analysis-main-color);
+      }
+      a-timeline {
+        --timeline-color: var(--time-analysis-main-color); 
+      }
+      .numbers {
+        margin: 5px 0;
+      }
+      .numbers iron-icon {
+        margin-right: 5px;
       }
     </style>
 
-    <template is="dom-repeat" items="[[datetimesData]]">
-      <p>[[_stringify(item)]]</p>
-    </template>
-    <hr>
-    <p>[[_stringify(relatedData)]]
-    <hr>
-    <p>[[minTime]]-[[maxTime]]
+    <a-timeline datetimes=[[datetimes]] sorted-datetimes="{{sortedDatetimes}}" first-day="{{firstDay}}" total-days-diff="{{totalDaysDiff}}"></a-timeline>
 
-    <google-chart
+    <div class="numbers"><iron-icon icon="time"></iron-icon> [[relatedData.minTime]] • [[relatedData.averageTime]] • [[relatedData.maxTime]]</div>
+    <div class="numbers"><iron-icon icon="frequency"></iron-icon> [[relatedData.shorterPeriod]]d • [[relatedData.averagePeriod]]d • [[relatedData.longerPeriod]]d</div>
+
+    <template is="dom-if" if="[[debug]]">
+      <template is="dom-repeat" items="[[datetimesData]]">
+        <p>[[_stringify(item)]]</p>
+      </template>
+      <hr>
+      <p>[[_stringify(relatedData)]]</p>
+      <hr>
+      <p>[[minTime]]-[[maxTime]]</p>
+    </template>
+
+    <!-- <google-chart
       type='pie'
       options='{"title": "Distribution of days in 2001Q1"}'
       cols='[{"label":"Month", "type":"string"}, {"label":"Days", "type":"number"}]'
       rows='[["Jan", 31],["Feb", 28],["Mar", 31]]'>
-    </google-chart>
+    </google-chart> -->
 
   </template>
 
@@ -41,46 +60,190 @@
       static get is() { return 'time-analysis'; }
       static get properties() {
         return {
+          debug: {
+            type: Boolean,
+            value: false,
+          },
           datetimes: {
             type: Array,
             value: null,
           },
           datetimesData: {
             type: Array,
-            computed: 'computeDatetimesData(datetimes)',
+            computed: 'computeDatetimesData(sortedDatetimes, relatedData.firstDate)',
           },
           relatedData: {
             type: String,
-            computed: 'computedRelatedData(datetimesData)',
+            computed: 'computedRelatedData(relatedData, datetimesData)',
           },
         };
       }
 
-      computeDatetimesData(datetimes) {
+      computeDatetimesData(datetimes, firstDate) {
         if (!datetimes || !datetimes[0]) return;
-        const datetimesData = datetimes
-          .map(dt => new Date(dt))
-          .map(dt => {
+        const sortedDatetimes = datetimes
+          .map(dt => this._toDateTime(dt))
+          .sort((a, b) => this._sortDates(a, b));
+        const datetimesData = sortedDatetimes
+          .map(dt => this._toDateTime(dt))
+          .sort((a, b) => this._sortDates(a, b))
+          .map((dt, index) => {
             return {
               datetime: dt, 
               weekday: this._getWeekDay(dt),
               time: this._getTime(dt),
+              daysDiff: firstDate ? this._computeDaysDiff(firstDate, dt) : null,
+              daysDiffFromLast: (index > 0) ? this._computeDaysDiff(sortedDatetimes[index-1], dt) : null,
+              formattedDate: this._formatDate(dt),
+              day: this._getDay(dt),
             }
-          }); 
-        console.log(datetimesData);
+          });
         return datetimesData;
       }
 
-      computedRelatedData(datetimesData) {
+      computedRelatedData(relatedData, datetimesData) {
         if (!datetimesData || !datetimesData[0]) return;
+        if (!relatedData) relatedData = {};
+        this._computeRelateData_FirstDate(relatedData, datetimesData);  
+        this._computeRelateData_Times(relatedData, datetimesData);  
+        this._computeRelateData_DaysDiff(relatedData, datetimesData);  
+        this._computeRelateData_Frequency(relatedData, datetimesData);  
+        this._computeRelateData_TimeAverage(relatedData, datetimesData);  
+
+        return relatedData;
+      }
+
+      _computeRelateData_FirstDate(relatedData, datetimesData) {
+        const firstDateInMillisec = Math.min(...datetimesData.map(dt => this._toDateTime(dt.datetime)));
+        this.set('firstDate', new Date(firstDateInMillisec));
+        relatedData.firstDate = this.firstDate;
+      }
+
+      _computeRelateData_Times(relatedData, datetimesData) {
         const times = datetimesData.map(dt => dt.time).sort();
         this.set('minTime', times[0])
         this.set('maxTime', times[times.length-1])
+        relatedData.minTime = this.minTime;
+        relatedData.maxTime = this.maxTime;
+      }
+      _computeRelateData_DaysDiff(relatedData, datetimesData) {
+        // https://stackoverflow.com/questions/3224834/get-difference-between-2-dates-in-javascript
+        const dates = datetimesData.map(dt => dt.datetime);
+        const firstDate = dates[0];
+        const lastDate = dates[dates.length-1];
 
-        return {
-          minTime: this.minTime,
-          maxTime: this.maxTime,
-        }
+        const totalDaysDiff = this._computeDaysDiff(firstDate, lastDate)
+        this.set('totalDaysDiff', totalDaysDiff)
+        relatedData.totalDaysDiff = this.totalDaysDiff;
+      }
+      _computeRelateData_Frequency(relatedData, datetimesData) {
+        const diffs = datetimesData.map(dt => dt.daysDiffFromLast).filter(dt => !!dt).sort((a, b) => a > b);
+        const averagePeriod = this._average(diffs)
+
+        // const firstDate = dates[0];
+        // const lastDate = dates[dates.length-1];
+
+        // const totalDaysDiff = this._computeDaysDiff(firstDate, lastDate)
+        this.set('averagePeriod', averagePeriod.toFixed(1))
+        this.set('shorterPeriod', diffs[0]);
+        this.set('longerPeriod', diffs[diffs.length-1]);
+        relatedData.averagePeriod = this.averagePeriod;
+        relatedData.shorterPeriod = this.shorterPeriod;
+        relatedData.longerPeriod = this.longerPeriod;
+      }
+      _computeRelateData_TimeAverage(relatedData, datetimesData) {
+        const sameDateTimesInMillisec = datetimesData
+          .map(dt => {
+            let date = new Date(dt.datetime);
+            const now = new Date();
+            date.setDate(now.getDate());
+            date.setMonth(now.getMonth());
+            date.setFullYear(now.getFullYear());
+            return date.getTime();
+          })
+          .sort((a, b) => a > b);
+        // function getAverageTime(array) {
+        //   let sum = 0;
+        //   array.map(function(d) {
+        //     let now = new Date();
+        //     let startDay = d.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
+        //     sum += startDay;
+        //   });
+
+        //   return new Date(sum / dateArray.length);
+        // }
+        const averageTime = this._average(sameDateTimesInMillisec)
+
+        // const firstDate = dates[0];
+        // const lastDate = dates[dates.length-1];
+
+        // const totalDaysDiff = this._computeDaysDiff(firstDate, lastDate)
+        const averageTimeInMilissec = averageTime;
+        const averageTimeFullDate = this._timestampToDate(averageTimeInMilissec);
+        this.set('averageTime', this._getTime(averageTimeFullDate) );
+        relatedData.averageTime = this.averageTime;
+      }
+
+      _timestampToDate(timestamp) {
+        return new Date(timestamp);
+      }
+ 
+      _average(arr) {
+        // https://stackoverflow.com/questions/10359907/array-sum-and-average
+        var sum = arr.reduce(function(a, b) { return a + b; });
+        var avg = sum / arr.length;
+        return avg;
+
+        // let finalstate = arr.reduce((state,a) => { 
+        //   state.sum += a;
+        //   state.count += 1; 
+        //   return state 
+        // }, { sum: 0, count: 0 }); 
+        // return finalstate.sum/finalstate.count;       
+      }
+
+      _computeDaysDiff(firstDate, lastDate) {
+        if (!lastDate || !firstDate) return;        
+        const notimeFirstDate = this._removeTime(firstDate);
+        const notimeLastDate = this._removeTime(lastDate);
+        const timeDiff = Math.abs((new Date(notimeLastDate)).getTime() - (new Date(notimeFirstDate)).getTime());
+        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        return daysDiff;
+      }
+
+      _removeTime(datetime) {
+        return new Date(datetime.getFullYear(), datetime.getMonth(), datetime.getDate());
+      }
+
+      _computeTimelineItemStyle(item) {
+        return `left: ${this._calcRelativeDiff(item)}%;`;
+      }
+
+      _calcRelativeDiff(item) {
+        const relativeDiff = 100 * (item.daysDiff / this.totalDaysDiff);
+        return (relativeDiff == 100) ? 99 : relativeDiff;
+      }
+
+      _toDateTime(date) {
+        return new Date(date);
+      }
+
+      _getDay(date) {
+        return new Date(date).getUTCDate();
+      }
+
+      _formatDate(date) {
+        if (!date) return;
+
+        //https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+        var options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const dateFormat = new Intl.DateTimeFormat(window.navigator.language, options);
+
+        return dateFormat.format(date);        
+      }
+
+      _sortDates(a, b) {
+        return new Date(a) - new Date(b);
       }
 
       _getWeekDay(date) {
@@ -91,7 +254,15 @@
         return weekdayFormat.format(date);
       }
       _getTime(date) {
-        return date.toLocaleString('pt-BR').substring(11,16).trim();
+        // return date.toLocaleString('pt-BR').substring(11,16).trim();
+        if (!date) return;
+
+        //https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+        var options = { hour: '2-digit', minute: '2-digit' };
+        const dateFormat = new Intl.DateTimeFormat(window.navigator.language, options);
+
+        return dateFormat.format(date);        
+
       }
 
       _stringify(obj) {

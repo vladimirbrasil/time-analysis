@@ -4,7 +4,10 @@
   "main": "time-analysis.html",
   "dependencies": {
     "polymer": "Polymer/polymer#^2.0.0",
-    "google-chart": "GoogleWebComponents/google-chart#^2.0.0"
+    "google-chart": "GoogleWebComponents/google-chart#^2.0.0",
+    "a-timeline": "vladimirbrasil/a-timeline#^0.0.2",
+    "iron-icon": "PolymerElements/iron-icon#^2.0.1",
+    "iron-iconset-svg": "PolymerElements/iron-iconset-svg#^2.1.0"
   },
   "devDependencies": {
     "iron-demo-helpers": "PolymerElements/iron-demo-helpers#^2.0.0",
